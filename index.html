@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>BACKROOMS: NIGHTMARE — 가로 화면</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080705;color:#f0f0e1;font-family:system-ui,sans-serif;touch-action:none}
+  #game{display:block;width:100vw;height:100dvh;touch-action:none}
+  #ui{position:fixed;inset:0;pointer-events:none}
+  .btn{pointer-events:auto;touch-action:none;user-select:none;border:2px solid rgba(230,225,195,.75);background:rgba(20,20,15,.72);color:#fff;border-radius:12px;font-weight:700;font-size:clamp(11px,1.8vw,15px);min-width:clamp(48px,7vw,70px);min-height:clamp(40px,8vh,54px);padding:7px}
+  .btn:active,.btn.active{background:rgba(190,177,105,.8);color:#111}
+  #stickBase{pointer-events:auto;position:absolute;left:max(14px,env(safe-area-inset-left));bottom:max(14px,env(safe-area-inset-bottom));width:clamp(90px,17vh,130px);height:clamp(90px,17vh,130px);border-radius:50%;background:rgba(220,220,200,.13);border:2px solid rgba(240,240,225,.55);touch-action:none}
+  #stick{position:absolute;left:29%;top:29%;width:42%;height:42%;border-radius:50%;background:rgba(240,240,225,.78);border:2px solid #fff;box-shadow:0 2px 8px #000}
+  #buttons{position:absolute;right:max(14px,env(safe-area-inset-right));bottom:max(14px,env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(3,minmax(48px,7vw));gap:7px;pointer-events:none}
+  #buttons .btn{pointer-events:auto}
+  #run{grid-column:1}
+  #turnL{grid-column:2}
+  #turnR{grid-column:3}
+  #hint{position:absolute;top:max(7px,env(safe-area-inset-top));left:150px;right:150px;text-align:center;font-size:clamp(10px,1.6vw,13px);text-shadow:0 2px 3px #000;opacity:.95}
+  #status{position:absolute;left:max(12px,env(safe-area-inset-left));top:max(10px,env(safe-area-inset-top));font-size:clamp(10px,1.5vw,13px);text-shadow:0 2px 3px #000;white-space:pre-line}
+  #message{position:absolute;left:20%;right:20%;bottom:clamp(105px,19vh,145px);text-align:center;color:#ffe66e;font-weight:700;text-shadow:0 2px 5px #000;font-size:clamp(12px,2vw,18px)}
+  #centerBtns{position:absolute;z-index:20;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:clamp(6px,1.5vh,12px);background:rgba(0,0,0,.62);pointer-events:auto;text-align:center;padding:14px}
+  #centerBtns h1{font-size:clamp(28px,7vh,52px);margin:0;color:#beb169;letter-spacing:2px}
+  #centerBtns p{margin:0 0 4px;font-size:clamp(11px,2.2vh,16px)}
+  #start,#restart{font-size:clamp(14px,2.4vh,18px);padding:10px 22px;min-width:170px}
+  #mapPanel{position:absolute;left:12px;top:62px;max-width:30vw;display:none;background:rgba(0,0,0,.85);padding:5px;border:1px solid #aaa;pointer-events:none}
+  #mapCanvas{display:block;width:min(24vw,240px);height:auto}
+  #rotatePrompt{display:none;position:fixed;z-index:99;inset:0;background:#111;color:#fff;align-items:center;justify-content:center;text-align:center;padding:28px;font-size:18px;line-height:1.6}
+  #rotatePrompt span{display:block;font-size:44px;margin-bottom:12px}
+  @media (orientation:portrait){
+    #rotatePrompt{display:flex}
+  }
+  @media (orientation:landscape) and (max-height:420px){
+    #stickBase{width:84px;height:84px}
+    #buttons{gap:4px;grid-template-columns:repeat(3,minmax(43px,6.5vw))}
+    .btn{min-height:36px;padding:5px}
+    #message{bottom:100px}
+  }
+</style>
+</head>
+<body>
+<div id="rotatePrompt"><div><span>📱 ↻</span>게임을 가로 화면으로 즐기려면<br><b>휴대전화를 옆으로 돌려 주세요.</b></div></div>
+<canvas id="game"></canvas>
+<div id="ui">
+  <div id="hint">조이스틱: 이동 · 화면 좌우로 밀기: 회전 · 버튼: 달리기 / 손전등 / 지도</div>
+  <div id="status"></div>
+  <div id="message"></div>
+  <div id="stickBase"><div id="stick"></div></div>
+  <div id="buttons">
+    <button class="btn" id="light">손전등</button>
+    <button class="btn" id="mapBtn">지도</button>
+    <button class="btn" id="run">달리기</button>
+    <button class="btn" id="turnL">↶ 회전</button>
+    <button class="btn" id="turnR">회전 ↷</button>
+  </div>
+  <div id="mapPanel"><canvas id="mapCanvas"></canvas></div>
+  <div id="centerBtns">
+    <h1 id="endTitle">BACKROOMS</h1>
+    <p id="endSub">NIGHTMARE · 모바일 터치 버전</p>
+    <p id="endHelp">미로에서 손전등을 찾고 출구로 탈출하세요.<br>손전등을 얻으면 괴물이 깨어납니다.</p>
+    <button class="btn" id="start">터치해서 시작</button>
+  </div>
+</div>
+<script>
+(() => {
+'use strict';
+const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+const statusEl=document.getElementById('status'), messageEl=document.getElementById('message');
+const center=document.getElementById('centerBtns'), endTitle=document.getElementById('endTitle'), endSub=document.getElementById('endSub'), endHelp=document.getElementById('endHelp'), startBtn=document.getElementById('start');
+const mapPanel=document.getElementById('mapPanel'), mapCanvas=document.getElementById('mapCanvas'), mctx=mapCanvas.getContext('2d');
+const stickBase=document.getElementById('stickBase'), stick=document.getElementById('stick');
+const lightBtn=document.getElementById('light'), mapBtn=document.getElementById('mapBtn'), runBtn=document.getElementById('run'), turnL=document.getElementById('turnL'), turnR=document.getElementById('turnR');
+const MAP=[
+"1111111111111111111111111111111",
+"1000000000000000000000000000001",
+"1011111110111011101110111011101",
+"1000100001101000100010000010001",
+"1110101101101110101111101110101",
+"1000101000001000001000001000011",
+"1011111011101011101011101011101",
+"1000101000100000100000100000001",
+"1101101110101111101110101111101",
+"1000000000100000000010000000111",
+"1011101111101110111011101110101",
+"1000100000001000100000000010001",
+"1010111011101011101110111011001",
+"1000001000000010001000000000011",
+"1111101011101111101011101111101",
+"1000001010000000001000000000001",
+"1011101010111011101011101110101",
+"1000000000100000000010001000101",
+"1110111110101110111010110010111",
+"1000000000001000000000101000001",
+"1001101111101011101110101011101",
+"1100100000001000000010010010001",
+"1010111010101111101101111011111",
+"10001000001000100000001000001E1",
+"1010000100000010001110000110001",
+"1111111111111111111111111111111"
+];
+const TILE=64, MAP_H=MAP.length, MAP_W=MAP[0].length;
+let W=innerWidth,H=innerHeight,dpr=1;
+function resize(){dpr=Math.min(devicePixelRatio||1,1.5);W=innerWidth;H=innerHeight;canvas.width=Math.floor(W*dpr);canvas.height=Math.floor(H*dpr);canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(dpr,0,0,dpr,0,0);mapCanvas.width=MAP_W*8;mapCanvas.height=MAP_H*8;drawMap();}
+addEventListener('resize',resize);
+let state='title', px,py,angle,mx,my,monsterActive,flashlight,flashlightCollected,fx,fy,health,stamina,elapsed,messageTimer,damage,scare,path=[],pathTimer=0,minimap=false;
+const FOV=Math.PI*65/180, MOVE_SPEED=155, TURN_SPEED=2.0;
+function reset(){
+ px=TILE*1.5;py=TILE*1.5;angle=0;
+ mx=TILE*27.5;my=TILE*21.5;monsterActive=false;
+ flashlight=false;flashlightCollected=false;fx=TILE*5.5;fy=TILE*3.5;
+ health=100;stamina=100;elapsed=0;messageTimer=0;damage=0;scare=0;path=[];pathTimer=0;minimap=false;
+ mapPanel.style.display='none';messageEl.textContent='';state='playing';center.style.display='none';
+}
+function cell(x,y){let c=Math.floor(x/TILE),r=Math.floor(y/TILE);if(r<0||r>=MAP_H||c<0||c>=MAP_W)return'1';return MAP[r][c]}
+function wall(x,y){return cell(x,y)==='1'}
+function canMove(x,y,r=13){return [[-r,-r],[r,-r],[-r,r],[r,r]].every(([a,b])=>!wall(x+a,y+b))}
+function dist(x1,y1,x2,y2){return Math.hypot(x2-x1,y2-y1)}
+function norm(a){return (a+Math.PI)%(2*Math.PI)-Math.PI}
+function ray(a){let dx=Math.cos(a),dy=Math.sin(a),x=px,y=py;for(let t=0;t<950;t+=3){x+=dx*3;y+=dy*3;let c=cell(x,y);if(c==='1'||c==='E')return [t+3,c]}return[950,'1']}
+function drawWorld(){
+ const hh=H/2;ctx.fillStyle='#646044';ctx.fillRect(0,0,W,hh);ctx.fillStyle='#353125';ctx.fillRect(0,hh,W,hh);
+ const rays=Math.max(160,Math.floor(W/2)), colW=W/rays;
+ for(let i=0;i<rays;i++){
+  let a=angle-FOV/2+i*FOV/rays,[depth,c]=ray(a);depth*=Math.max(.05,Math.cos(a-angle));
+  let wh=Math.min(TILE*H/Math.max(depth,1),H*3),top=hh-wh/2,b=Math.max(12,205-depth*.20);
+  let color;
+  if(c==='E'&&flashlightCollected)color=`rgb(${Math.min(255,b+55)},${Math.min(255,b+45)},30)`;
+  else color=`rgb(${b*.92*(flashlight?1:.35)},${b*.83*(flashlight?1:.35)},${b*.48*(flashlight?1:.35)})`;
+  ctx.fillStyle=color;ctx.fillRect(i*colW,top,Math.ceil(colW)+1,wh);
+  if(i%12===0){ctx.strokeStyle='#5f5430';ctx.beginPath();ctx.moveTo(i*colW,top);ctx.lineTo(i*colW,top+wh);ctx.stroke()}
+ }
+ // flashlight vignette
+ ctx.fillStyle=flashlight?'rgba(0,0,0,.38)':'rgba(0,0,0,.86)';ctx.fillRect(0,0,W,H);
+ if(flashlight){let g=ctx.createRadialGradient(W/2,H*.48,Math.min(W,H)*.06,W/2,H*.48,Math.min(W,H)*.52);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(.5,'rgba(0,0,0,.08)');g.addColorStop(1,'rgba(0,0,0,.65)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H)}
+ const d=dist(px,py,mx,my);if(flashlightCollected&&monsterActive&&d<300){ctx.fillStyle=`rgba(150,0,0,${(1-d/300)*.32})`;ctx.fillRect(0,0,W,H)}
+}
+function project(x,y,scaleFactor=1){
+ let dx=x-px,dy=y-py,d=Math.hypot(dx,dy);if(d<1)return null;
+ let rel=norm(Math.atan2(dy,dx)-angle);if(Math.abs(rel)>FOV/2+.25)return null;
+ let [wd]=ray(Math.atan2(dy,dx));if(wd<d-20)return null;
+ return {d,rel,sx:W/2+Math.tan(rel)*(W/(2*Math.tan(FOV/2)))};
+}
+function drawItem(){
+ if(flashlightCollected)return;let p=project(fx,fy);if(!p)return;
+ let h=Math.min(TILE*H/p.d*.35,100),w=Math.max(10,h*.8),sy=H/2+h*.35;
+ ctx.fillStyle='rgba(255,230,70,.18)';ctx.beginPath();ctx.arc(p.sx,sy,Math.max(12,h),0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#f0dc64';ctx.fillRect(p.sx-w/2,sy-Math.max(4,h/5),w,Math.max(8,h/3));ctx.strokeStyle='#ffffdc';ctx.lineWidth=2;ctx.strokeRect(p.sx-w/2,sy-Math.max(4,h/5),w,Math.max(8,h/3));
+}
+function drawMonster(){
+ if(!flashlightCollected||!monsterActive)return;let p=project(mx,my);if(!p)return;
+ let h=Math.min(TILE*H/p.d*.9,H*2),w=Math.max(12,h*.48),top=H/2-h/2,r=Math.max(5,w/3);
+ ctx.fillStyle='#0d0c0d';ctx.beginPath();ctx.ellipse(p.sx,H/2,w/2,h/2,0,0,Math.PI*2);ctx.fill();
+ ctx.beginPath();ctx.arc(p.sx,top+r,r,0,Math.PI*2);ctx.fill();
+ for(let ex of [p.sx-Math.max(3,r/2),p.sx+Math.max(3,r/2)]){ctx.fillStyle='#640000';ctx.beginPath();ctx.arc(ex,top+r,r/4+2,0,Math.PI*2);ctx.fill();ctx.fillStyle='#e61419';ctx.beginPath();ctx.arc(ex,top+r,Math.max(2,r/5),0,Math.PI*2);ctx.fill()}
+}
+function drawHUD(){
+ ctx.fillStyle='#f0f0e1';ctx.font='12px system-ui';ctx.fillText(`손전등: ${flashlight?'ON':'OFF'}   생존 시간: ${Math.floor(elapsed)}초`,10,17);
+ ctx.fillStyle='#2d0f0f';ctx.fillRect(10,25,125,9);ctx.fillStyle='#e61419';ctx.fillRect(10,25,125*Math.max(0,health/100),9);
+ ctx.fillStyle='#191919';ctx.fillRect(10,38,125,6);ctx.fillStyle='#3cb4d2';ctx.fillRect(10,38,125*stamina/100,6);
+ ctx.strokeStyle='rgba(255,255,255,.8)';ctx.beginPath();ctx.moveTo(W/2-5,H/2);ctx.lineTo(W/2+5,H/2);ctx.moveTo(W/2,H/2-5);ctx.lineTo(W/2,H/2+5);ctx.stroke();
+ if(monsterActive&&dist(px,py,mx,my)<350){ctx.fillStyle='#f22';ctx.font='bold 36px system-ui';ctx.textAlign='center';ctx.fillText('RUN!',W/2,H*.22);ctx.textAlign='left'}
+}
+function drawMap(){
+ if(!mctx)return;const s=8;mapCanvas.width=MAP_W*s;mapCanvas.height=MAP_H*s;
+ for(let r=0;r<MAP_H;r++)for(let c=0;c<MAP_W;c++){mctx.fillStyle=MAP[r][c]==='1'?'#64645a':'#23231e';mctx.fillRect(c*s,r*s,s-1,s-1)}
+ if(!flashlightCollected){mctx.fillStyle='#fff032';mctx.beginPath();mctx.arc(fx/TILE*s,fy/TILE*s,3,0,Math.PI*2);mctx.fill()}
+ mctx.fillStyle='#3cb4ff';mctx.beginPath();mctx.arc(px/TILE*s,py/TILE*s,3,0,Math.PI*2);mctx.fill();mctx.strokeStyle='#3cb4ff';mctx.beginPath();mctx.moveTo(px/TILE*s,py/TILE*s);mctx.lineTo(px/TILE*s+Math.cos(angle)*10,py/TILE*s+Math.sin(angle)*10);mctx.stroke();
+}
+function walkable(c,r){return c>=0&&c<MAP_W&&r>=0&&r<MAP_H&&MAP[r][c]!=='1'}
+function findPath(start,goal){
+ const key=(p)=>p[0]+','+p[1], frontier=[[0,start]],came=new Map([[key(start),null]]),cost=new Map([[key(start),0]]);
+ while(frontier.length){frontier.sort((a,b)=>a[0]-b[0]);let cur=frontier.shift()[1];if(cur[0]===goal[0]&&cur[1]===goal[1])break;
+  for(let [dc,dr] of [[1,0],[-1,0],[0,1],[0,-1]]){let n=[cur[0]+dc,cur[1]+dr];if(!walkable(...n))continue;let nk=key(n),nc=cost.get(key(cur))+1;if(!cost.has(nk)||nc<cost.get(nk)){cost.set(nk,nc);came.set(nk,cur);frontier.push([nc+Math.abs(goal[0]-n[0])+Math.abs(goal[1]-n[1]),n])}}
+ }
+ if(!came.has(key(goal)))return[];let out=[],cur=goal;while(cur&&key(cur)!==key(start)){out.push(cur);cur=came.get(key(cur))}return out.reverse();
+}
+let joy={x:0,y:0,id:null}, pressed={run:false,left:false,right:false};
+function move(dt){
+ if(minimap)return;
+ angle=norm(angle+(pressed.left? -1:0)*TURN_SPEED*dt+(pressed.right?1:0)*TURN_SPEED*dt);
+ // Joystick vertical: up is forward; horizontal turns. A small horizontal offset also strafes.
+ const turn=-joy.x*TURN_SPEED*dt, forward=-joy.y;
+ angle=norm(angle+turn);
+ let side=0, f=forward;
+ const running=pressed.run&&f>0&&stamina>0;let speed=running?240:MOVE_SPEED;
+ if(running)stamina=Math.max(0,stamina-32*dt);else stamina=Math.min(100,stamina+18*dt);
+ side=joy.x*.65;
+ let len=Math.hypot(f,side);if(len>1){f/=len;side/=len}
+ let dx=(Math.cos(angle)*f-Math.sin(angle)*side)*speed*dt,dy=(Math.sin(angle)*f+Math.cos(angle)*side)*speed*dt;
+ if(canMove(px+dx,py))px+=dx;if(canMove(px,py+dy))py+=dy;
+}
+function updateMonster(dt){
+ if(!flashlightCollected)return;let d=dist(px,py,mx,my);if(d<440)monsterActive=true;if(!monsterActive)return;
+ pathTimer-=dt;if(pathTimer<=0){path=findPath([Math.floor(mx/TILE),Math.floor(my/TILE)],[Math.floor(px/TILE),Math.floor(py/TILE)]);pathTimer=.35}
+ let speed=d<230?68:48;if(path.length){let tx=path[0][0]*TILE+TILE/2,ty=path[0][1]*TILE+TILE/2,vx=tx-mx,vy=ty-my,l=Math.hypot(vx,vy);if(l>2){let step=Math.min(speed*dt,l),nx=mx+vx/l*step,ny=my+vy/l*step;if(canMove(nx,my,12))mx=nx;if(canMove(mx,ny,12))my=ny;if(l<=step+2)path.shift()}}
+ d=dist(px,py,mx,my);if(d<85){health-=38*dt;damage=.25}if(health<=0||d<28){state='caught';scare=2;showEnd('잡혔다!','괴물에게 붙잡혔습니다.','다시 시작하려면 버튼을 누르세요.')}
+}
+function showEnd(title,sub,help){center.style.display='flex';endTitle.textContent=title;endSub.textContent=sub;endHelp.textContent=help;startBtn.textContent='다시 시작'}
+function loop(now){
+ if(!loop.last)loop.last=now;let dt=Math.min((now-loop.last)/1000,.05);loop.last=now;
+ if(state==='playing'){
+  elapsed+=dt;move(dt);
+  if(!flashlightCollected&&dist(px,py,fx,fy)<35){flashlightCollected=true;flashlight=true;monsterActive=true;messageEl.textContent='손전등을 획득했다! 무언가가 눈치를 챘다...';messageTimer=3}
+  updateMonster(dt);
+  if(flashlightCollected&&cell(px,py)==='E'){state='escaped';showEnd('YOU ESCAPED!','탈출 성공!','버튼을 눌러 다시 플레이하세요.')}
+  drawWorld();drawItem();drawMonster();drawHUD();
+  if(messageTimer>0){messageTimer-=dt;if(messageTimer<=0)messageEl.textContent=''}
+  if(damage>0){damage=Math.max(0,damage-dt);ctx.fillStyle=`rgba(255,0,0,${damage*1.2})`;ctx.fillRect(0,0,W,H)}
+  if(monsterActive){let d=dist(px,py,mx,my);if(d<220){let i=(220-d)/25;canvas.style.transform=`translate(${(Math.random()-.5)*i*2}px,${(Math.random()-.5)*i*2}px)`}else canvas.style.transform=''}
+  if(minimap)drawMap();
+ }else if(state==='caught'){drawScare(dt)}else if(state==='title'){drawTitleBackground()}
+ requestAnimationFrame(loop);
+}
+function drawTitleBackground(){ctx.fillStyle='#11100c';ctx.fillRect(0,0,W,H)}
+let scareTime=2;
+function drawScare(dt){
+ scareTime-=dt;let pulse=25+Math.abs(Math.sin(performance.now()*.025))*35;ctx.fillStyle=`rgb(${pulse},0,3)`;ctx.fillRect(0,0,W,H);
+ let cx=W/2+(Math.random()-.5)*10,cy=H/2-15,fw=Math.min(W*.55,250)*(1+(2-Math.max(0,scareTime))*.23),fh=Math.min(H*.7,360)*(1+(2-Math.max(0,scareTime))*.23);
+ ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(cx,cy,fw*.62,fh*.62,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#413634';ctx.beginPath();ctx.ellipse(cx,cy,fw/2,fh/2,0,0,Math.PI*2);ctx.fill();
+ for(let x of [cx-fw*.19,cx+fw*.19]){ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(x,cy-fh*.12,fw*.13,fh*.12,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f00';ctx.beginPath();ctx.arc(x,cy-fh*.12,Math.max(4,fw*.035),0,Math.PI*2);ctx.fill()}
+ ctx.fillStyle='#030000';ctx.beginPath();ctx.ellipse(cx,cy+fh*.2,fw*.28,fh*.14,-.08,0,Math.PI*2);ctx.fill();
+ for(let y=0;y<H;y+=5){ctx.fillStyle='rgba(0,0,0,.18)';ctx.fillRect(0,y,W,1)}
+ if(scareTime<=0&&center.style.display!=='flex')showEnd('잡혔다!','괴물에게 붙잡혔습니다.','다시 시작하려면 버튼을 누르세요.');
+}
+function drawTitleBackground2(){}
+function startGame(e){
+  if(e){e.preventDefault();e.stopPropagation();}
+  scareTime=2;
+  reset();
+}
+startBtn.addEventListener('click',startGame);
+startBtn.addEventListener('pointerup',startGame);
+startBtn.addEventListener('touchend',startGame,{passive:false});
+startBtn.style.position='relative';
+startBtn.style.zIndex='21';
+lightBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(state==='playing'&&flashlightCollected)flashlight=!flashlight;else if(state==='playing'&&!flashlightCollected)messageEl.textContent='먼저 바닥에 놓인 손전등을 찾아야 합니다.'});
+mapBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(state!=='playing')return;minimap=!minimap;mapPanel.style.display=minimap?'block':'none';if(minimap)drawMap();mapBtn.classList.toggle('active',minimap)});
+runBtn.addEventListener('pointerdown',e=>{e.preventDefault();pressed.run=true;runBtn.classList.add('active')});['pointerup','pointercancel','pointerleave'].forEach(ev=>runBtn.addEventListener(ev,()=>{pressed.run=false;runBtn.classList.remove('active')}));
+turnL.addEventListener('pointerdown',e=>{e.preventDefault();pressed.left=true});['pointerup','pointercancel','pointerleave'].forEach(ev=>turnL.addEventListener(ev,()=>pressed.left=false));
+turnR.addEventListener('pointerdown',e=>{e.preventDefault();pressed.right=true});['pointerup','pointercancel','pointerleave'].forEach(ev=>turnR.addEventListener(ev,()=>pressed.right=false));
+function joyUpdate(e){let r=stickBase.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,dx=e.clientX-cx,dy=e.clientY-cy,max=r.width*.34,l=Math.hypot(dx,dy);if(l>max){dx=dx/l*max;dy=dy/l*max}joy.x=dx/max;joy.y=dy/max;stick.style.transform=`translate(${dx}px,${dy}px)`}
+stickBase.addEventListener('pointerdown',e=>{e.preventDefault();joy.id=e.pointerId;stickBase.setPointerCapture(e.pointerId);joyUpdate(e)});
+stickBase.addEventListener('pointermove',e=>{if(e.pointerId===joy.id)joyUpdate(e)});
+function releaseJoy(e){if(e.pointerId===joy.id){joy.id=null;joy.x=0;joy.y=0;stick.style.transform='translate(0,0)'}}
+stickBase.addEventListener('pointerup',releaseJoy);stickBase.addEventListener('pointercancel',releaseJoy);
+function drawTitleBackground(){ctx.fillStyle='#11100c';ctx.fillRect(0,0,W,H)}
+resize();state='title';requestAnimationFrame(loop);
